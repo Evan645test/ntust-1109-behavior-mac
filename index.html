@@ -121,7 +121,14 @@
 
   <section>
     <h2>2. 行為轉換（GSEQ）</h2>
-    <p>直接加入已經轉好的 result.txt。可以一次選多個，也可以分次加入，新的檔案會接在後面。列是前一個行為，行是下一個行為。橘色是 z ≥ 1.96，藍色是 z ≤ -1.96。</p>
+    <p>程序檔和已轉換的資料檔分開加。程序檔只負責代碼，例如 <code>($ Behavior = A B C D E F)</code>。資料檔是轉好的 result.txt，可以一次選多個，也可以分次加入。</p>
+    <p class="ui"><strong>程序檔</strong></p>
+    <div class="row">
+      <label class="file secondary">加入程序檔<input id="program-file" type="file" accept=".txt,text/plain"></label>
+    </div>
+    <p id="program-status" class="note"></p>
+    <textarea id="program-input" placeholder="Event&#10;($ Behavior = A B C D E F)&#10;Type (Clinic Control);"></textarea>
+    <p class="ui"><strong>已轉換的資料檔</strong></p>
     <div class="row">
       <label class="file">加入已轉換的檔案<input id="seq-files" type="file" accept=".txt,text/plain" multiple></label>
       <button id="use-converted" class="secondary" type="button">加入上面的轉換結果</button>
@@ -129,6 +136,7 @@
     <ul id="added-files" class="note"></ul>
     <textarea id="seq-input" placeholder="把 result.txt 拖到這裡，或按上面的按鈕加入。也可以直接貼上 % Student 開頭的序列"></textarea>
     <div class="choices ui">
+      <label><input type="radio" name="codes" value="program"> 使用程序檔的代碼</label>
       <label><input type="radio" name="codes" value="all" checked> 全部代碼</label>
       <label><input type="radio" name="codes" value="AF"> 只分析 A–F（講義的六個行為）</label>
       <label><input type="radio" name="codes" value="AG"> 只分析 A–G</label>
@@ -489,6 +497,7 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         save: saveInput.value,
         seq: seqInput.value,
+        program: document.getElementById("program-input").value,
         result: latestResult,
         files: addedFiles,
         mode: selected ? selected.value : "all",
@@ -506,11 +515,15 @@
     try { data = JSON.parse(raw); } catch (error) { return; }
     if (data.save) saveInput.value = data.save;
     if (data.seq) seqInput.value = data.seq;
+    if (data.program) {
+      document.getElementById("program-input").value = data.program;
+      showProgramStatus(data.program);
+    }
     if (Array.isArray(data.files)) {
       addedFiles = data.files.filter(function (name) { return typeof name === "string" && name; });
       renderAddedFiles();
     }
-    if (data.mode === "all" || data.mode === "AF" || data.mode === "AG") {
+    if (data.mode === "all" || data.mode === "AF" || data.mode === "AG" || data.mode === "program") {
       document.querySelector('input[name="codes"][value="' + data.mode + '"]').checked = true;
     }
     document.getElementById("drop-repeats").checked = !!data.drop;
@@ -623,6 +636,56 @@
     });
   }
 
+  function showProgramStatus(text) {
+    var codes = declaredCodes(text);
+    var status = document.getElementById("program-status");
+    if (!codes.length) {
+      status.textContent = "這份程序檔裡還沒有 ($ Behavior = A B C ) 這種代碼。";
+      status.className = "error";
+      return;
+    }
+    status.className = "note";
+    status.textContent = "程序檔代碼：" + codes.join(" ");
+  }
+
+  function setProgram(text) {
+    var chunk = String(text).replace(/^\uFEFF/, "").trim();
+    document.getElementById("program-input").value = chunk;
+    showProgramStatus(chunk);
+    if (declaredCodes(chunk).length) {
+      document.querySelector('input[name="codes"][value="program"]').checked = true;
+    }
+    persist();
+  }
+
+  document.getElementById("program-file").addEventListener("change", function (event) {
+    var file = event.target.files && event.target.files[0];
+    event.target.value = "";
+    if (!file) return;
+    readFile(file).then(function (text) {
+      setProgram(text);
+    }).catch(function (error) {
+      analyzeStatus.textContent = error.message;
+      analyzeStatus.className = "error";
+    });
+  });
+
+  var programInput = document.getElementById("program-input");
+  programInput.addEventListener("input", function () {
+    showProgramStatus(programInput.value);
+    persist();
+  });
+  programInput.addEventListener("dragover", function (event) { event.preventDefault(); });
+  programInput.addEventListener("drop", function (event) {
+    event.preventDefault();
+    var file = event.dataTransfer.files && event.dataTransfer.files[0];
+    if (!file) return;
+    readFile(file).then(setProgram).catch(function (error) {
+      analyzeStatus.textContent = error.message;
+      analyzeStatus.className = "error";
+    });
+  });
+
   document.getElementById("seq-files").addEventListener("change", function (event) {
     addConvertedFiles(event.target.files);
     event.target.value = "";
@@ -673,10 +736,18 @@
     var found = [];
     sessions.forEach(function (session) { found = found.concat(session.codes); });
     var mode = document.querySelector('input[name="codes"]:checked').value;
+    var programCodes = declaredCodes(document.getElementById("program-input").value);
     var requested = null;
-    if (mode === "AF") requested = ["A", "B", "C", "D", "E", "F"];
-    if (mode === "AG") requested = ["A", "B", "C", "D", "E", "F", "G"];
-    var codes = orderCodes(found, declaredCodes(raw), requested);
+    if (mode === "program") {
+      if (!programCodes.length) {
+        analyzeStatus.textContent = "程序檔裡沒有 ($ Behavior = A B C ) 這種代碼。";
+        analyzeStatus.className = "error";
+        return;
+      }
+      requested = programCodes;
+    } else if (mode === "AF") requested = ["A", "B", "C", "D", "E", "F"];
+    else if (mode === "AG") requested = ["A", "B", "C", "D", "E", "F", "G"];
+    var codes = orderCodes(found, programCodes.length ? programCodes : declaredCodes(raw), requested);
     latestTable = analyze(sessions, codes, document.getElementById("drop-repeats").checked);
     var summary = sessions.map(function (session) {
       return "<li>" + escapeHtml(session.label || session.source || "未命名") + "：" + session.codes.length + " 個事件</li>";
@@ -781,6 +852,8 @@
     try { localStorage.removeItem(STORAGE_KEY); } catch (error) {}
     saveInput.value = "";
     seqInput.value = "";
+    document.getElementById("program-input").value = "";
+    document.getElementById("program-status").textContent = "";
     latestResult = "";
     latestTable = null;
     activeTab = "z";
