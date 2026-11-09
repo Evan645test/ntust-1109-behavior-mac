@@ -125,6 +125,7 @@
     <p class="ui"><strong>程序檔</strong></p>
     <div class="row">
       <label class="file secondary">加入程序檔<input id="program-file" type="file" accept=".txt,text/plain"></label>
+      <button id="use-class-program" class="secondary" type="button">填入本堂課程序檔</button>
     </div>
     <p id="program-status" class="note"></p>
     <textarea id="program-input" placeholder="Event&#10;($ Behavior = A B C D E F)&#10;Type (Clinic Control);"></textarea>
@@ -657,6 +658,10 @@
     }
     persist();
   }
+
+  document.getElementById("use-class-program").addEventListener("click", function () {
+    setProgram("Event\n($ Behavior = A B C D E F)\nType (Clinic Control);");
+  });
 
   document.getElementById("program-file").addEventListener("change", function (event) {
     var file = event.target.files && event.target.files[0];
