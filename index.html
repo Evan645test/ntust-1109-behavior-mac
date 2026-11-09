@@ -86,6 +86,9 @@
   td.neg { background: var(--neg-bg); color: var(--neg); font-weight: 700; }
   .error { color: var(--pos); }
   svg.diagram { width: 100%; height: auto; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+  .tabs button[aria-selected="true"] { background: var(--ink); color: #fffdf8; }
+  .tab-panel[hidden] { display: none; }
   @media (max-width: 760px) {
     main { width: calc(100% - 12px); }
     section { padding: 14px 10px; }
@@ -131,9 +134,8 @@
     </div>
     <div class="row">
       <button id="analyze" type="button">計算</button>
-      <button id="download-count" class="secondary" type="button">下載次數.csv</button>
-      <button id="download-z" class="secondary" type="button">下載 z.csv</button>
     </div>
+    <p class="note">算完後用分頁切換結果。每一頁可以單獨下載，也可以一次下載全部。</p>
     <p id="analyze-status" class="note"></p>
     <div id="report"></div>
   </section>
@@ -344,15 +346,19 @@
     return "<div class=\"wrap\"><table><thead><tr><th>前 \\ 後</th>" + head + "</tr></thead><tbody>" + rows + "</tbody></table></div>";
   }
 
+  function csvValue(item, field) {
+    if (field === "observed") return String(item.observed);
+    if (field === "probability") return item.probability === null ? "" : item.probability.toFixed(6);
+    if (field === "expected") return Number(item.expected).toFixed(6);
+    return item.z === null ? "" : item.z.toFixed(6);
+  }
+
   function csvMatrix(table, field) {
     var lines = ["given\\target," + table.codes.join(",")];
     table.codes.forEach(function (given) {
       var row = [given];
       table.codes.forEach(function (target) {
-        var item = cell(table, given, target);
-        if (field === "observed") row.push(String(item.observed));
-        else if (item.z === null) row.push("");
-        else row.push(item.z.toFixed(6));
+        row.push(csvValue(cell(table, given, target), field));
       });
       lines.push(row.join(","));
     });
@@ -576,25 +582,89 @@
     var summary = sessions.map(function (session) {
       return "<li>" + escapeHtml(session.label || session.source || "未命名") + "：" + session.codes.length + " 個事件</li>";
     }).join("");
+    var figure = diagram(latestTable);
     report.innerHTML =
       "<p>序列 " + sessions.length + " 段，事件 " + latestTable.events + "，轉換 " + latestTable.transitions + "。</p>" +
       "<ul>" + summary + "</ul>" +
-      "<h3>轉換圖</h3>" + diagram(latestTable) +
-      "<h3>調整後殘差 z</h3>" + matrixHtml(latestTable, function (item) { return fmt(item.z, 2); }, true) +
-      "<h3>觀察次數</h3>" + matrixHtml(latestTable, function (item) { return String(item.observed); }, false) +
-      "<h3>條件機率</h3>" + matrixHtml(latestTable, function (item) { return fmt(item.probability, 3); }, false) +
-      "<h3>期望次數</h3>" + matrixHtml(latestTable, function (item) { return fmt(item.expected, 2); }, false);
+      '<div class="tabs" role="tablist">' +
+        tabButton("z", "調整後殘差", true) +
+        tabButton("count", "觀察次數", false) +
+        tabButton("probability", "條件機率", false) +
+        tabButton("expected", "期望次數", false) +
+        tabButton("diagram", "轉換圖", false) +
+        tabButton("sequence", "序列", false) +
+        '<button type="button" id="download-all" class="secondary">下載全部</button>' +
+      "</div>" +
+      tabPanel("z", "下載 z.csv", true, matrixHtml(latestTable, function (item) { return fmt(item.z, 2); }, true)) +
+      tabPanel("count", "下載次數.csv", false, matrixHtml(latestTable, function (item) { return String(item.observed); }, false)) +
+      tabPanel("probability", "下載條件機率.csv", false, matrixHtml(latestTable, function (item) { return fmt(item.probability, 3); }, false)) +
+      tabPanel("expected", "下載期望次數.csv", false, matrixHtml(latestTable, function (item) { return fmt(item.expected, 2); }, false)) +
+      tabPanel("diagram", "下載轉換圖.svg", false, figure) +
+      tabPanel("sequence", "下載 result.txt", false, "<pre>" + escapeHtml((latestResult || seqInput.value).trim()) + "</pre>");
     analyzeStatus.className = "note";
-    analyzeStatus.textContent = "計算完成。";
+    analyzeStatus.textContent = "計算完成。用上方分頁查看，每一頁都可以下載。";
   });
 
-  document.getElementById("download-count").addEventListener("click", function () {
-    if (!latestTable) return;
-    download("行為轉換-次數.csv", csvMatrix(latestTable, "observed"), "text/csv;charset=utf-8");
-  });
-  document.getElementById("download-z").addEventListener("click", function () {
-    if (!latestTable) return;
-    download("行為轉換-z.csv", csvMatrix(latestTable, "z"), "text/csv;charset=utf-8");
+  function tabButton(id, label, selected) {
+    return '<button type="button" role="tab" data-tab="' + id + '" aria-selected="' + (selected ? "true" : "false") + '">' + label + "</button>";
+  }
+
+  function tabPanel(id, downloadLabel, selected, body) {
+    return '<div class="tab-panel" data-panel="' + id + '"' + (selected ? "" : " hidden") + ">" +
+      '<div class="row"><button type="button" data-download="' + id + '">' + downloadLabel + "</button></div>" +
+      body + "</div>";
+  }
+
+  function showTab(id) {
+    report.querySelectorAll("[data-tab]").forEach(function (button) {
+      button.setAttribute("aria-selected", button.getAttribute("data-tab") === id ? "true" : "false");
+    });
+    report.querySelectorAll("[data-panel]").forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-panel") !== id;
+    });
+  }
+
+  function pageFile(id) {
+    if (!latestTable && id !== "sequence") return null;
+    if (id === "z") return ["行為轉換-z.csv", csvMatrix(latestTable, "z"), "text/csv;charset=utf-8"];
+    if (id === "count") return ["行為轉換-次數.csv", csvMatrix(latestTable, "observed"), "text/csv;charset=utf-8"];
+    if (id === "probability") return ["行為轉換-條件機率.csv", csvMatrix(latestTable, "probability"), "text/csv;charset=utf-8"];
+    if (id === "expected") return ["行為轉換-期望次數.csv", csvMatrix(latestTable, "expected"), "text/csv;charset=utf-8"];
+    if (id === "diagram") {
+      var svg = report.querySelector("[data-panel='diagram'] svg");
+      if (!svg) return null;
+      return ["行為轉換圖.svg", svg.outerHTML, "image/svg+xml;charset=utf-8"];
+    }
+    var sequence = latestResult || seqInput.value;
+    if (!sequence.trim()) return null;
+    return ["result.txt", sequence, "text/plain;charset=utf-8"];
+  }
+
+  function downloadPage(id) {
+    var file = pageFile(id);
+    if (!file) {
+      analyzeStatus.textContent = "這一頁還沒有可下載的結果。";
+      analyzeStatus.className = "error";
+      return;
+    }
+    download(file[0], file[1], file[2]);
+  }
+
+  function downloadAll() {
+    ["sequence", "count", "z", "probability", "expected", "diagram"].forEach(function (id, index) {
+      setTimeout(function () { downloadPage(id); }, index * 350);
+    });
+  }
+
+  report.addEventListener("click", function (event) {
+    var tab = event.target.closest("[data-tab]");
+    if (tab) {
+      showTab(tab.getAttribute("data-tab"));
+      return;
+    }
+    var button = event.target.closest("[data-download]");
+    if (button) downloadPage(button.getAttribute("data-download"));
+    if (event.target.id === "download-all") downloadAll();
   });
 
   window.MPSGSEQ = {
