@@ -1,0 +1,2 @@
+% Studen#3
+A B B B B B A A A A A E E D A A A A A A A A A A A A F F C C C C C C C C C C C F B B A A D A A A A B A A A A F A A F A A A A B A A B A A A A A C C A A B A A A A A A A A A B B A A B B B B A A A A A A A A A A A A C A A A A A D A A A A A A A A A A A A A A A A A A A A F A A A A A A A A A A E D A A A B A A D D B A A A A A A A A A J A A B A A A D E D D A A E D D D B B D A A A A A A A A A A A J B E E D A A B E D A D B D D G A E E E D A A A A A C C B A D E E D;

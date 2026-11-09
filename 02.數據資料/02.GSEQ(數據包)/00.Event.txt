@@ -1,0 +1,4 @@
+Event
+($ Behavior = A B C D E F G J)
+
+Type (Clinic Control);

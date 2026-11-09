@@ -1,0 +1,8 @@
+
+
+% Student #1
+ A B C D D D D E F F F I J G G G G F G F G F F T T T;
+
+
+% Student #2
+ A B C D D D D D D F G G F G F F G I G G T T T;

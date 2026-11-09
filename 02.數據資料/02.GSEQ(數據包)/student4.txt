@@ -1,0 +1,2 @@
+% Studen#4
+A G A A G A A A A A A B B B B B B B B B B B B B B B B B A A A A A A A B B A A A A A A A B B B A A F F F F F F B B A A E E E E D A A A A A A A A A A B B B B B A A A E E D A A A A A A F F D A A A A A A A A A A A A A A A A A B C C C C C C C C C C C A A J A B B B A A A A B C C C C C C C C C C A A A A E D D D D A A B B D E D E E D B A F A B B A A A A B B A A A A A A A A A A A A A A A A A A A J G C C C C C A A A A A A C C C C C C C C B E E E D A F F D E D E E E D A E B E B E B D B A E E E D A B E E E D A E D;

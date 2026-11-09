@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.exe
+*.pdb
+*.conversion_profile.json
+mac-usage-guide_*/
+logs.txt
+使用說明.md
+操作教學(三)Mac怎麼做.md

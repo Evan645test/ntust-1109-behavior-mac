@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MPS 與 GSEQ 網頁版</title>
+<style>
+  :root {
+    --ink: #1c1915;
+    --muted: #5e584e;
+    --line: #e4d8c4;
+    --paper: #fffdf8;
+    --page: #f3ead8;
+    --pos: #9a3412;
+    --pos-bg: #fde8dc;
+    --neg: #1e3a5f;
+    --neg-bg: #e4ebf5;
+    --accent: #9a3412;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: "Iowan Old Style", Palatino, "Songti TC", serif;
+  }
+  main {
+    width: min(1100px, calc(100% - 28px));
+    margin: 28px auto 72px;
+  }
+  h1 { margin: 0 0 8px; font-size: 36px; font-weight: 600; }
+  h2 { margin: 0 0 8px; font-size: 26px; }
+  p { line-height: 1.55; }
+  .lede { max-width: 68ch; color: var(--muted); }
+  section {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 22px;
+    margin: 16px 0;
+  }
+  label, button, input, textarea, .ui {
+    font-family: "Helvetica Neue", "PingFang TC", sans-serif;
+  }
+  textarea {
+    width: 100%;
+    min-height: 180px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    padding: 10px;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
+  button, .file {
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: #fffdf8;
+    padding: 8px 14px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  button.secondary, .file.secondary { background: transparent; color: var(--ink); }
+  input[type="file"] { display: none; }
+  .choices { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 14px; }
+  .note { color: var(--muted); font-size: 14px; }
+  pre {
+    white-space: pre-wrap;
+    background: #f7f1e6;
+    padding: 12px;
+    font-family: "Helvetica Neue", "PingFang TC", sans-serif;
+    font-size: 14px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "Helvetica Neue", "PingFang TC", sans-serif;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap { overflow-x: auto; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  td.pos { background: var(--pos-bg); color: var(--pos); font-weight: 700; }
+  td.neg { background: var(--neg-bg); color: var(--neg); font-weight: 700; }
+  .error { color: var(--pos); }
+  svg.diagram { width: 100%; height: auto; }
+  @media (max-width: 760px) {
+    main { width: calc(100% - 12px); }
+    section { padding: 14px 10px; }
+    h1 { font-size: 28px; }
+    table { font-size: 11px; }
+    th, td { padding: 4px 3px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>MPS 與 GSEQ 網頁版</h1>
+    <p class="lede">在瀏覽器裡完成兩件事：把 RPG Maker 的 save.txt 轉成行為序列，以及計算 lag 1 的次數表、調整後殘差和轉換圖。檔案只留在這台電腦，不會上傳。</p>
+  </header>
+
+  <section>
+    <h2>1. 轉換紀錄（MPS）</h2>
+    <p>每一行只留第一個字。第一個字是大寫 A 到 Z 才算。小寫開頭的 sure、cancel、test 會略過。</p>
+    <div class="row">
+      <label class="file">選擇 save.txt<input id="save-files" type="file" accept=".txt,text/plain" multiple></label>
+      <button id="convert" type="button">轉換</button>
+      <button id="download-result" class="secondary" type="button">下載 result.txt</button>
+    </div>
+    <textarea id="save-input" placeholder="也可以直接把 save.txt 的內容貼在這裡"></textarea>
+    <p id="convert-status" class="note"></p>
+    <pre id="convert-output" hidden></pre>
+  </section>
+
+  <section>
+    <h2>2. 行為轉換（GSEQ）</h2>
+    <p>用上面的結果，或選 result.txt、student.txt、SDS 文字檔。列是前一個行為，行是下一個行為。橘色是 z ≥ 1.96，藍色是 z ≤ -1.96。</p>
+    <div class="row">
+      <label class="file">選擇序列檔<input id="seq-files" type="file" accept=".txt,text/plain" multiple></label>
+      <button id="use-converted" class="secondary" type="button">使用上面的轉換結果</button>
+    </div>
+    <textarea id="seq-input" placeholder="貼上 % Student 開頭的序列，或 SDS 全文"></textarea>
+    <div class="choices ui">
+      <label><input type="radio" name="codes" value="all" checked> 全部代碼</label>
+      <label><input type="radio" name="codes" value="AF"> 只分析 A–F（講義的六個行為）</label>
+      <label><input type="radio" name="codes" value="AG"> 只分析 A–G</label>
+      <label><input type="checkbox" id="drop-repeats"> 先去掉連續重複</label>
+    </div>
+    <div class="row">
+      <button id="analyze" type="button">計算</button>
+      <button id="download-count" class="secondary" type="button">下載次數.csv</button>
+      <button id="download-z" class="secondary" type="button">下載 z.csv</button>
+    </div>
+    <p id="analyze-status" class="note"></p>
+    <div id="report"></div>
+  </section>
+</main>
+<script>
+(function () {
+  "use strict";
+
+  function codesFromSave(text) {
+    var codes = [];
+    var lines = String(text).replace(/^\uFEFF/, "").split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      if (!lines[i]) continue;
+      var first = lines[i].charAt(0);
+      if (first >= "A" && first <= "Z") codes.push(first);
+    }
+    return codes;
+  }
+
+  function toResult(groups) {
+    var blocks = [];
+    for (var i = 0; i < groups.length; i++) {
+      var body = "";
+      for (var j = 0; j < groups[i].codes.length; j++) body += " " + groups[i].codes[j];
+      blocks.push("\n\n% Student #" + (i + 1) + "\n" + body + ";\n");
+    }
+    return blocks.join("");
+  }
+
+  function declaredCodes(text) {
+    var found = [];
+    var re = /\(\s*\$[^=]*=\s*([^)]*)\)/g;
+    var match;
+    while ((match = re.exec(text))) {
+      var parts = match[1].trim().split(/\s+/);
+      for (var i = 0; i < parts.length; i++) {
+        if (parts[i] && found.indexOf(parts[i]) < 0) found.push(parts[i]);
+      }
+    }
+    return found;
+  }
+
+  function stripDeclarations(text) {
+    var kept = [];
+    var lines = String(text).replace(/^\uFEFF/, "").split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var stripped = lines[i].trim();
+      if (!stripped || stripped.charAt(0) === "(" || stripped.charAt(0) === "*") continue;
+      if (/^(event|timed|state|interval)\s*$/i.test(stripped)) continue;
+      if (/^type\b/i.test(stripped)) continue;
+      kept.push(lines[i]);
+    }
+    return kept.join("\n");
+  }
+
+  function parseSessions(text, source) {
+    var body = stripDeclarations(text);
+    var chunks = body.split(";");
+    var sessions = [];
+    for (var c = 0; c < chunks.length; c++) {
+      var label = "";
+      var codes = [];
+      var lines = chunks[c].split(/\r?\n/);
+      var stop = false;
+      for (var i = 0; i < lines.length && !stop; i++) {
+        var line = lines[i].trim();
+        if (!line) continue;
+        if (line.charAt(0) === "%") {
+          label = line.replace(/^%/, "").trim() || label;
+          continue;
+        }
+        var tokens = line.split(/\s+/);
+        for (var t = 0; t < tokens.length; t++) {
+          var token = tokens[t];
+          if (token === "=" || token === "$" || token === "/" || token.charAt(0) === "(" || token.charAt(0) === "$") {
+            if (token === "/") stop = true;
+            continue;
+          }
+          if (token.charAt(token.length - 1) === "/") {
+            token = token.slice(0, -1);
+            stop = true;
+          }
+          if (token) codes.push(token);
+          if (stop) break;
+        }
+      }
+      if (codes.length) sessions.push({ label: label, codes: codes, source: source || "" });
+    }
+    return sessions;
+  }
+
+  function prepareSequence(codes, keep, dropRepeats) {
+    var sequence = [];
+    for (var i = 0; i < codes.length; i++) {
+      if (!keep || keep[codes[i]]) sequence.push(codes[i]);
+    }
+    if (!dropRepeats) return sequence;
+    var collapsed = [];
+    for (var j = 0; j < sequence.length; j++) {
+      if (!collapsed.length || collapsed[collapsed.length - 1] !== sequence[j]) collapsed.push(sequence[j]);
+    }
+    return collapsed;
+  }
+
+  function orderCodes(found, declared, requested) {
+    if (requested) return requested.slice();
+    var unique = [];
+    for (var i = 0; i < found.length; i++) {
+      if (unique.indexOf(found[i]) < 0) unique.push(found[i]);
+    }
+    if (declared && declared.length) {
+      var head = [];
+      for (var d = 0; d < declared.length; d++) {
+        if (unique.indexOf(declared[d]) >= 0) head.push(declared[d]);
+      }
+      var tail = unique.filter(function (code) { return head.indexOf(code) < 0; }).sort();
+      return head.concat(tail);
+    }
+    var single = unique.every(function (code) { return code.length === 1; });
+    return single ? unique.slice().sort() : unique;
+  }
+
+  function analyze(sessions, codes, dropRepeats) {
+    var keep = {};
+    codes.forEach(function (code) { keep[code] = true; });
+    var counts = {};
+    var events = 0;
+    sessions.forEach(function (session) {
+      var sequence = prepareSequence(session.codes, keep, dropRepeats);
+      events += sequence.length;
+      for (var i = 0; i < sequence.length - 1; i++) {
+        var key = sequence[i] + "\t" + sequence[i + 1];
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    });
+    function count(given, target) {
+      return counts[given + "\t" + target] || 0;
+    }
+    var total = 0;
+    Object.keys(counts).forEach(function (key) { total += counts[key]; });
+    var rows = {};
+    var cols = {};
+    codes.forEach(function (given) {
+      rows[given] = 0;
+      codes.forEach(function (target) { rows[given] += count(given, target); });
+    });
+    codes.forEach(function (target) {
+      cols[target] = 0;
+      codes.forEach(function (given) { cols[target] += count(given, target); });
+    });
+    var cells = {};
+    codes.forEach(function (given) {
+      codes.forEach(function (target) {
+        var observed = count(given, target);
+        var expected = 0;
+        var probability = null;
+        var z = null;
+        if (rows[given]) probability = observed / rows[given];
+        if (total && rows[given] && cols[target]) {
+          expected = rows[given] * cols[target] / total;
+          var variance = expected * (1 - rows[given] / total) * (1 - cols[target] / total);
+          if (variance > 0) z = (observed - expected) / Math.sqrt(variance);
+        }
+        cells[given + "\t" + target] = {
+          given: given,
+          target: target,
+          observed: observed,
+          expected: expected,
+          probability: probability,
+          z: z
+        };
+      });
+    });
+    return { codes: codes, cells: cells, transitions: total, events: events };
+  }
+
+  function cell(table, given, target) {
+    return table.cells[given + "\t" + target];
+  }
+
+  function fmt(value, digits) {
+    if (value === null || value === undefined || Number.isNaN(value)) return "—";
+    return Number(value).toFixed(digits);
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function matrixHtml(table, render, color) {
+    var head = table.codes.map(function (code) {
+      return "<th>" + escapeHtml(code) + "</th>";
+    }).join("");
+    var rows = table.codes.map(function (given) {
+      var tds = ["<td>" + escapeHtml(given) + "</td>"];
+      table.codes.forEach(function (target) {
+        var item = cell(table, given, target);
+        var cls = "";
+        if (color && item.z !== null && Math.abs(item.z) >= 1.96) cls = item.z > 0 ? "pos" : "neg";
+        tds.push("<td class=\"" + cls + "\">" + escapeHtml(render(item)) + "</td>");
+      });
+      return "<tr>" + tds.join("") + "</tr>";
+    }).join("");
+    return "<div class=\"wrap\"><table><thead><tr><th>前 \\ 後</th>" + head + "</tr></thead><tbody>" + rows + "</tbody></table></div>";
+  }
+
+  function csvMatrix(table, field) {
+    var lines = ["given\\target," + table.codes.join(",")];
+    table.codes.forEach(function (given) {
+      var row = [given];
+      table.codes.forEach(function (target) {
+        var item = cell(table, given, target);
+        if (field === "observed") row.push(String(item.observed));
+        else if (item.z === null) row.push("");
+        else row.push(item.z.toFixed(6));
+      });
+      lines.push(row.join(","));
+    });
+    return "\uFEFF" + lines.join("\n") + "\n";
+  }
+
+  function significant(table) {
+    var list = [];
+    table.codes.forEach(function (given) {
+      table.codes.forEach(function (target) {
+        var item = cell(table, given, target);
+        if (item.z !== null && item.z >= 1.96) list.push(item);
+      });
+    });
+    list.sort(function (a, b) { return b.z - a.z; });
+    return list;
+  }
+
+  function diagram(table) {
+    var shown = significant(table);
+    if (!table.transitions || !shown.length) return "<p>沒有 z ≥ 1.96 的轉換。</p>";
+    var width = 860;
+    var height = 760;
+    var cx = width / 2;
+    var cy = height / 2;
+    var radius = 210;
+    var pos = {};
+    var ang = {};
+    table.codes.forEach(function (code, index) {
+      var angle = -Math.PI / 2 + (2 * Math.PI * index / table.codes.length);
+      ang[code] = angle;
+      pos[code] = [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)];
+    });
+    var arrows = shown.map(function (item) {
+      if (item.given === item.target) return selfLoop(pos[item.given], ang[item.given], item);
+      return arrow(pos[item.given], pos[item.target], item);
+    }).join("");
+    var nodes = table.codes.map(function (code) {
+      var x = pos[code][0];
+      var y = pos[code][1];
+      return '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="26" fill="#fffdf8" stroke="#1c1915" stroke-width="1.4"/>' +
+        '<text x="' + x.toFixed(1) + '" y="' + (y + 5).toFixed(1) + '" text-anchor="middle" font-size="18" font-family="Palatino, Songti TC, serif">' + escapeHtml(code) + "</text>";
+    }).join("");
+    return '<p class="note">圖只畫 z ≥ 1.96 的轉換。線上的數字是 z。</p>' +
+      '<svg class="diagram" viewBox="0 0 ' + width + " " + height + '" role="img">' +
+      '<defs><marker id="arrow-pos" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1.2 L 10 5 L 0 8.8 z" fill="#9a3412"/></marker></defs>' +
+      arrows + nodes + "</svg>";
+  }
+
+  function arrow(start, end, item) {
+    var dx = end[0] - start[0];
+    var dy = end[1] - start[1];
+    var length = Math.hypot(dx, dy) || 1;
+    var ux = dx / length;
+    var uy = dy / length;
+    var sx = start[0] + ux * 34;
+    var sy = start[1] + uy * 34;
+    var ex = end[0] - ux * 34;
+    var ey = end[1] - uy * 34;
+    var mx = (sx + ex) / 2 - uy * 28;
+    var my = (sy + ey) / 2 + ux * 28;
+    var width = (1.2 + Math.min(item.z, 8) * 0.28).toFixed(2);
+    return '<path d="M ' + sx.toFixed(1) + " " + sy.toFixed(1) + " Q " + mx.toFixed(1) + " " + my.toFixed(1) + " " + ex.toFixed(1) + " " + ey.toFixed(1) + '" fill="none" stroke="#9a3412" stroke-width="' + width + '" marker-end="url(#arrow-pos)"/>' +
+      '<text x="' + mx.toFixed(1) + '" y="' + my.toFixed(1) + '" font-size="12" fill="#9a3412" text-anchor="middle" font-family="Helvetica Neue, sans-serif" stroke="#fffdf8" stroke-width="4" paint-order="stroke">' + fmt(item.z, 2) + "</text>";
+  }
+
+  function selfLoop(origin, angle, item) {
+    var ox = Math.cos(angle);
+    var oy = Math.sin(angle);
+    var tx = -oy;
+    var ty = ox;
+    function point(tangent, outward) {
+      return [origin[0] + tx * tangent + ox * outward, origin[1] + ty * tangent + oy * outward];
+    }
+    var start = point(14, 22);
+    var end = point(-14, 22);
+    var a = point(48, 86);
+    var b = point(-48, 86);
+    var label = point(0, 98);
+    var width = (1.2 + Math.min(item.z, 8) * 0.22).toFixed(2);
+    return '<path d="M ' + start[0].toFixed(1) + " " + start[1].toFixed(1) + " C " + a[0].toFixed(1) + " " + a[1].toFixed(1) + ", " + b[0].toFixed(1) + " " + b[1].toFixed(1) + ", " + end[0].toFixed(1) + " " + end[1].toFixed(1) + '" fill="none" stroke="#9a3412" stroke-width="' + width + '" marker-end="url(#arrow-pos)"/>' +
+      '<text x="' + label[0].toFixed(1) + '" y="' + label[1].toFixed(1) + '" font-size="12" fill="#9a3412" text-anchor="middle" font-family="Helvetica Neue, sans-serif" stroke="#fffdf8" stroke-width="4" paint-order="stroke">' + fmt(item.z, 2) + "</text>";
+  }
+
+  function download(name, text, type) {
+    var blob = new Blob([text], { type: type || "text/plain;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function readFile(file) {
+    return file.arrayBuffer().then(function (buffer) {
+      var bytes = new Uint8Array(buffer);
+      var start = 0;
+      if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) start = 3;
+      var slice = bytes.subarray(start);
+      try {
+        return new TextDecoder("utf-8", { fatal: true }).decode(slice);
+      } catch (error) {
+        return new TextDecoder("big5").decode(slice);
+      }
+    });
+  }
+
+  var saveInput = document.getElementById("save-input");
+  var seqInput = document.getElementById("seq-input");
+  var convertStatus = document.getElementById("convert-status");
+  var convertOutput = document.getElementById("convert-output");
+  var analyzeStatus = document.getElementById("analyze-status");
+  var report = document.getElementById("report");
+  var latestResult = "";
+  var latestTable = null;
+
+  document.getElementById("save-files").addEventListener("change", function (event) {
+    var files = Array.prototype.slice.call(event.target.files || []);
+    Promise.all(files.map(readFile)).then(function (texts) {
+      saveInput.value = texts.join("\n\n");
+      convertStatus.textContent = "已讀入 " + files.length + " 個檔案。按「轉換」。";
+    }).catch(function (error) {
+      convertStatus.textContent = error.message;
+      convertStatus.className = "error";
+    });
+  });
+
+  document.getElementById("convert").addEventListener("click", function () {
+    var raw = saveInput.value;
+    if (!raw.trim()) {
+      convertStatus.textContent = "請先選擇或貼上 save.txt。";
+      convertStatus.className = "error";
+      return;
+    }
+    var pieces = raw.split(/\n\s*\n/).filter(function (piece) { return piece.trim(); });
+    if (pieces.length < 2) pieces = [raw];
+    var groups = pieces.map(function (piece, index) {
+      return { name: "檔案 " + (index + 1), codes: codesFromSave(piece) };
+    }).filter(function (group) { return group.codes.length; });
+    if (!groups.length) {
+      convertStatus.textContent = "沒有找到 A–Z 開頭的行。";
+      convertStatus.className = "error";
+      convertOutput.hidden = true;
+      latestResult = "";
+      return;
+    }
+    latestResult = toResult(groups);
+    convertOutput.hidden = false;
+    convertOutput.textContent = latestResult.trim();
+    convertStatus.className = "note";
+    convertStatus.textContent = groups.map(function (group) {
+      return group.codes.length + " 個代碼";
+    }).join("，");
+  });
+
+  document.getElementById("download-result").addEventListener("click", function () {
+    if (!latestResult) {
+      convertStatus.textContent = "請先按「轉換」。";
+      convertStatus.className = "error";
+      return;
+    }
+    download("result.txt", latestResult);
+  });
+
+  document.getElementById("seq-files").addEventListener("change", function (event) {
+    var files = Array.prototype.slice.call(event.target.files || []);
+    Promise.all(files.map(function (file) {
+      return readFile(file).then(function (text) { return { name: file.name, text: text }; });
+    })).then(function (loaded) {
+      seqInput.value = loaded.map(function (item) { return item.text; }).join("\n");
+      seqInput.dataset.names = loaded.map(function (item) { return item.name; }).join(", ");
+      analyzeStatus.textContent = "已讀入 " + loaded.length + " 個檔案。按「計算」。";
+      analyzeStatus.className = "note";
+    }).catch(function (error) {
+      analyzeStatus.textContent = error.message;
+      analyzeStatus.className = "error";
+    });
+  });
+
+  document.getElementById("use-converted").addEventListener("click", function () {
+    if (!latestResult) {
+      analyzeStatus.textContent = "請先在上面按「轉換」。";
+      analyzeStatus.className = "error";
+      return;
+    }
+    seqInput.value = latestResult;
+    analyzeStatus.textContent = "已帶入轉換結果。";
+    analyzeStatus.className = "note";
+  });
+
+  document.getElementById("analyze").addEventListener("click", function () {
+    var raw = seqInput.value;
+    if (!raw.trim()) {
+      analyzeStatus.textContent = "請先選擇序列檔，或使用上面的轉換結果。";
+      analyzeStatus.className = "error";
+      return;
+    }
+    var sessions = parseSessions(raw, "貼上的文字");
+    if (!sessions.length) {
+      var codes = codesFromSave(raw);
+      if (codes.length) sessions = [{ label: "save.txt", codes: codes, source: "save.txt" }];
+    }
+    if (!sessions.length) {
+      analyzeStatus.textContent = "這段文字裡沒有行為序列。";
+      analyzeStatus.className = "error";
+      report.innerHTML = "";
+      latestTable = null;
+      return;
+    }
+    var found = [];
+    sessions.forEach(function (session) { found = found.concat(session.codes); });
+    var mode = document.querySelector('input[name="codes"]:checked').value;
+    var requested = null;
+    if (mode === "AF") requested = ["A", "B", "C", "D", "E", "F"];
+    if (mode === "AG") requested = ["A", "B", "C", "D", "E", "F", "G"];
+    var codes = orderCodes(found, declaredCodes(raw), requested);
+    latestTable = analyze(sessions, codes, document.getElementById("drop-repeats").checked);
+    var summary = sessions.map(function (session) {
+      return "<li>" + escapeHtml(session.label || session.source || "未命名") + "：" + session.codes.length + " 個事件</li>";
+    }).join("");
+    report.innerHTML =
+      "<p>序列 " + sessions.length + " 段，事件 " + latestTable.events + "，轉換 " + latestTable.transitions + "。</p>" +
+      "<ul>" + summary + "</ul>" +
+      "<h3>轉換圖</h3>" + diagram(latestTable) +
+      "<h3>調整後殘差 z</h3>" + matrixHtml(latestTable, function (item) { return fmt(item.z, 2); }, true) +
+      "<h3>觀察次數</h3>" + matrixHtml(latestTable, function (item) { return String(item.observed); }, false) +
+      "<h3>條件機率</h3>" + matrixHtml(latestTable, function (item) { return fmt(item.probability, 3); }, false) +
+      "<h3>期望次數</h3>" + matrixHtml(latestTable, function (item) { return fmt(item.expected, 2); }, false);
+    analyzeStatus.className = "note";
+    analyzeStatus.textContent = "計算完成。";
+  });
+
+  document.getElementById("download-count").addEventListener("click", function () {
+    if (!latestTable) return;
+    download("行為轉換-次數.csv", csvMatrix(latestTable, "observed"), "text/csv;charset=utf-8");
+  });
+  document.getElementById("download-z").addEventListener("click", function () {
+    if (!latestTable) return;
+    download("行為轉換-z.csv", csvMatrix(latestTable, "z"), "text/csv;charset=utf-8");
+  });
+
+  window.MPSGSEQ = {
+    codesFromSave: codesFromSave,
+    toResult: toResult,
+    parseSessions: parseSessions,
+    analyze: analyze,
+    cell: cell
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+
+
+% Student #1
+ L A B C M M M M F F F I J R R R K G G G G F G F G F F T T T;
+
+
+% Student #2
+ L A B C M M M M M M F G G F G F F G I G G T T T;
+
+
+% Student #3
+ L A A B C M R F G F G G G G G G F T T T D D E E F I J R R R K R R R H N L A A B C M E E G F G G F G G G G G T T T D E F H N L A A B C M M M E E M M M M G G F G G G G F G F T T T D E F H N L A A A A B C M M I G F F E E G G F F G G G T T T D E E F H N L A A B C M G G F F F F G G F G T T T D D D E F H N L A A B C M M M F G G G F F G F F G T T T D E F H N;
