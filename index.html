@@ -102,7 +102,8 @@
 <main>
   <header>
     <h1>MPS 與 GSEQ 網頁版</h1>
-    <p class="lede">在瀏覽器裡完成兩件事：把 RPG Maker 的 save.txt 轉成行為序列，以及計算 lag 1 的次數表、調整後殘差和轉換圖。檔案只留在這台電腦，不會上傳。</p>
+    <p class="lede">在瀏覽器裡完成兩件事：把 RPG Maker 的 save.txt 轉成行為序列，以及計算 lag 1 的次數表、調整後殘差和轉換圖。打開或貼上的內容會暫存在這個瀏覽器，重新整理後還在。檔案不會上傳。</p>
+    <p class="row"><button id="clear-draft" class="secondary" type="button">清除暫存</button></p>
   </header>
 
   <section>
@@ -477,12 +478,57 @@
   var report = document.getElementById("report");
   var latestResult = "";
   var latestTable = null;
+  var activeTab = "z";
+  var STORAGE_KEY = "mps-gseq-draft-v1";
+
+  function persist() {
+    try {
+      var selected = document.querySelector('input[name="codes"]:checked');
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        save: saveInput.value,
+        seq: seqInput.value,
+        result: latestResult,
+        mode: selected ? selected.value : "all",
+        drop: document.getElementById("drop-repeats").checked,
+        tab: activeTab
+      }));
+    } catch (error) {}
+  }
+
+  function restore() {
+    var raw;
+    try { raw = localStorage.getItem(STORAGE_KEY); } catch (error) { return; }
+    if (!raw) return;
+    var data;
+    try { data = JSON.parse(raw); } catch (error) { return; }
+    if (data.save) saveInput.value = data.save;
+    if (data.seq) seqInput.value = data.seq;
+    if (data.mode === "all" || data.mode === "AF" || data.mode === "AG") {
+      document.querySelector('input[name="codes"][value="' + data.mode + '"]').checked = true;
+    }
+    document.getElementById("drop-repeats").checked = !!data.drop;
+    if (data.result) {
+      latestResult = data.result;
+      convertOutput.hidden = false;
+      convertOutput.textContent = data.result.trim();
+      convertStatus.textContent = "已恢復上次轉換的序列。";
+    } else if (data.save) {
+      convertStatus.textContent = "已恢復上次打開的 save 內容。";
+    }
+    if (data.tab) activeTab = data.tab;
+    if (data.seq && data.seq.trim()) {
+      document.getElementById("analyze").click();
+      showTab(activeTab);
+      analyzeStatus.textContent = "已恢復上次的序列與計算結果。";
+    }
+  }
 
   document.getElementById("save-files").addEventListener("change", function (event) {
     var files = Array.prototype.slice.call(event.target.files || []);
     Promise.all(files.map(readFile)).then(function (texts) {
       saveInput.value = texts.join("\n\n");
-      convertStatus.textContent = "已讀入 " + files.length + " 個檔案。按「轉換」。";
+      convertStatus.textContent = "已讀入 " + files.length + " 個檔案，並暫存在這個瀏覽器。按「轉換」。";
+      persist();
     }).catch(function (error) {
       convertStatus.textContent = error.message;
       convertStatus.className = "error";
@@ -506,6 +552,7 @@
       convertStatus.className = "error";
       convertOutput.hidden = true;
       latestResult = "";
+      persist();
       return;
     }
     latestResult = toResult(groups);
@@ -514,7 +561,8 @@
     convertStatus.className = "note";
     convertStatus.textContent = groups.map(function (group) {
       return group.codes.length + " 個代碼";
-    }).join("，");
+    }).join("，") + "。已暫存在這個瀏覽器。";
+    persist();
   });
 
   document.getElementById("download-result").addEventListener("click", function () {
@@ -533,8 +581,9 @@
     })).then(function (loaded) {
       seqInput.value = loaded.map(function (item) { return item.text; }).join("\n");
       seqInput.dataset.names = loaded.map(function (item) { return item.name; }).join(", ");
-      analyzeStatus.textContent = "已讀入 " + loaded.length + " 個檔案。按「計算」。";
+      analyzeStatus.textContent = "已讀入 " + loaded.length + " 個檔案，並暫存在這個瀏覽器。按「計算」。";
       analyzeStatus.className = "note";
+      persist();
     }).catch(function (error) {
       analyzeStatus.textContent = error.message;
       analyzeStatus.className = "error";
@@ -550,6 +599,7 @@
     seqInput.value = latestResult;
     analyzeStatus.textContent = "已帶入轉換結果。";
     analyzeStatus.className = "note";
+    persist();
   });
 
   document.getElementById("analyze").addEventListener("click", function () {
@@ -569,6 +619,7 @@
       analyzeStatus.className = "error";
       report.innerHTML = "";
       latestTable = null;
+      persist();
       return;
     }
     var found = [];
@@ -602,7 +653,9 @@
       tabPanel("diagram", "下載轉換圖.svg", false, figure) +
       tabPanel("sequence", "下載 result.txt", false, "<pre>" + escapeHtml((latestResult || seqInput.value).trim()) + "</pre>");
     analyzeStatus.className = "note";
-    analyzeStatus.textContent = "計算完成。用上方分頁查看，每一頁都可以下載。";
+    analyzeStatus.textContent = "計算完成。用上方分頁查看，每一頁都可以下載。內容已暫存在這個瀏覽器。";
+    showTab(activeTab);
+    persist();
   });
 
   function tabButton(id, label, selected) {
@@ -616,6 +669,8 @@
   }
 
   function showTab(id) {
+    if (!report.querySelector("[data-tab]")) return;
+    activeTab = id;
     report.querySelectorAll("[data-tab]").forEach(function (button) {
       button.setAttribute("aria-selected", button.getAttribute("data-tab") === id ? "true" : "false");
     });
@@ -660,12 +715,35 @@
     var tab = event.target.closest("[data-tab]");
     if (tab) {
       showTab(tab.getAttribute("data-tab"));
+      persist();
       return;
     }
     var button = event.target.closest("[data-download]");
     if (button) downloadPage(button.getAttribute("data-download"));
     if (event.target.id === "download-all") downloadAll();
   });
+
+  saveInput.addEventListener("input", persist);
+  seqInput.addEventListener("input", persist);
+  document.getElementById("drop-repeats").addEventListener("change", persist);
+  document.querySelectorAll('input[name="codes"]').forEach(function (radio) {
+    radio.addEventListener("change", persist);
+  });
+  document.getElementById("clear-draft").addEventListener("click", function () {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (error) {}
+    saveInput.value = "";
+    seqInput.value = "";
+    latestResult = "";
+    latestTable = null;
+    activeTab = "z";
+    convertOutput.hidden = true;
+    convertOutput.textContent = "";
+    report.innerHTML = "";
+    convertStatus.textContent = "已清除這個瀏覽器裡的暫存。";
+    convertStatus.className = "note";
+    analyzeStatus.textContent = "";
+  });
+  restore();
 
   window.MPSGSEQ = {
     codesFromSave: codesFromSave,
