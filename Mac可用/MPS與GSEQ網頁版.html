@@ -121,12 +121,13 @@
 
   <section>
     <h2>2. 行為轉換（GSEQ）</h2>
-    <p>用上面的結果，或選 result.txt、student.txt、SDS 文字檔。列是前一個行為，行是下一個行為。橘色是 z ≥ 1.96，藍色是 z ≤ -1.96。</p>
+    <p>直接加入已經轉好的 result.txt。可以一次選多個，也可以分次加入，新的檔案會接在後面。列是前一個行為，行是下一個行為。橘色是 z ≥ 1.96，藍色是 z ≤ -1.96。</p>
     <div class="row">
-      <label class="file">選擇序列檔<input id="seq-files" type="file" accept=".txt,text/plain" multiple></label>
-      <button id="use-converted" class="secondary" type="button">使用上面的轉換結果</button>
+      <label class="file">加入已轉換的檔案<input id="seq-files" type="file" accept=".txt,text/plain" multiple></label>
+      <button id="use-converted" class="secondary" type="button">加入上面的轉換結果</button>
     </div>
-    <textarea id="seq-input" placeholder="貼上 % Student 開頭的序列，或 SDS 全文"></textarea>
+    <ul id="added-files" class="note"></ul>
+    <textarea id="seq-input" placeholder="把 result.txt 拖到這裡，或按上面的按鈕加入。也可以直接貼上 % Student 開頭的序列"></textarea>
     <div class="choices ui">
       <label><input type="radio" name="codes" value="all" checked> 全部代碼</label>
       <label><input type="radio" name="codes" value="AF"> 只分析 A–F（講義的六個行為）</label>
@@ -479,6 +480,7 @@
   var latestResult = "";
   var latestTable = null;
   var activeTab = "z";
+  var addedFiles = [];
   var STORAGE_KEY = "mps-gseq-draft-v1";
 
   function persist() {
@@ -488,6 +490,7 @@
         save: saveInput.value,
         seq: seqInput.value,
         result: latestResult,
+        files: addedFiles,
         mode: selected ? selected.value : "all",
         drop: document.getElementById("drop-repeats").checked,
         tab: activeTab
@@ -503,6 +506,10 @@
     try { data = JSON.parse(raw); } catch (error) { return; }
     if (data.save) saveInput.value = data.save;
     if (data.seq) seqInput.value = data.seq;
+    if (Array.isArray(data.files)) {
+      addedFiles = data.files.filter(function (name) { return typeof name === "string" && name; });
+      renderAddedFiles();
+    }
     if (data.mode === "all" || data.mode === "AF" || data.mode === "AG") {
       document.querySelector('input[name="codes"][value="' + data.mode + '"]').checked = true;
     }
@@ -574,20 +581,59 @@
     download("result.txt", latestResult);
   });
 
-  document.getElementById("seq-files").addEventListener("change", function (event) {
-    var files = Array.prototype.slice.call(event.target.files || []);
+  function renderAddedFiles() {
+    var list = document.getElementById("added-files");
+    if (!addedFiles.length) {
+      list.innerHTML = "";
+      return;
+    }
+    list.innerHTML = addedFiles.map(function (name) {
+      return "<li>" + escapeHtml(name) + "</li>";
+    }).join("");
+  }
+
+  function appendSequence(text) {
+    var chunk = String(text).replace(/^\uFEFF/, "").trim();
+    if (!chunk) return false;
+    seqInput.value = seqInput.value.trim() ? seqInput.value.replace(/\s*$/, "") + "\n\n" + chunk + "\n" : chunk + "\n";
+    return true;
+  }
+
+  function addConvertedFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    if (!files.length) return;
     Promise.all(files.map(function (file) {
       return readFile(file).then(function (text) { return { name: file.name, text: text }; });
     })).then(function (loaded) {
-      seqInput.value = loaded.map(function (item) { return item.text; }).join("\n");
-      seqInput.dataset.names = loaded.map(function (item) { return item.name; }).join(", ");
-      analyzeStatus.textContent = "已讀入 " + loaded.length + " 個檔案，並暫存在這個瀏覽器。按「計算」。";
-      analyzeStatus.className = "note";
+      var added = 0;
+      loaded.forEach(function (item) {
+        if (!appendSequence(item.text)) return;
+        addedFiles.push(item.name);
+        added += 1;
+      });
+      renderAddedFiles();
+      analyzeStatus.className = added ? "note" : "error";
+      analyzeStatus.textContent = added
+        ? "已加入 " + added + " 個轉換檔，內容接在後面。按「計算」。"
+        : "這些檔案是空的。";
       persist();
     }).catch(function (error) {
       analyzeStatus.textContent = error.message;
       analyzeStatus.className = "error";
     });
+  }
+
+  document.getElementById("seq-files").addEventListener("change", function (event) {
+    addConvertedFiles(event.target.files);
+    event.target.value = "";
+  });
+
+  seqInput.addEventListener("dragover", function (event) {
+    event.preventDefault();
+  });
+  seqInput.addEventListener("drop", function (event) {
+    event.preventDefault();
+    addConvertedFiles(event.dataTransfer.files);
   });
 
   document.getElementById("use-converted").addEventListener("click", function () {
@@ -596,8 +642,10 @@
       analyzeStatus.className = "error";
       return;
     }
-    seqInput.value = latestResult;
-    analyzeStatus.textContent = "已帶入轉換結果。";
+    if (!appendSequence(latestResult)) return;
+    addedFiles.push("上面的轉換結果");
+    renderAddedFiles();
+    analyzeStatus.textContent = "已加入上面的轉換結果。按「計算」。";
     analyzeStatus.className = "note";
     persist();
   });
@@ -736,6 +784,8 @@
     latestResult = "";
     latestTable = null;
     activeTab = "z";
+    addedFiles = [];
+    renderAddedFiles();
     convertOutput.hidden = true;
     convertOutput.textContent = "";
     report.innerHTML = "";
